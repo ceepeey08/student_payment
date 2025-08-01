@@ -62,15 +62,16 @@ $students = $conn->query("SELECT lrn, last_name, first_name, mi, grade, section,
                             <select class="form-select" id="lrnDropdown" required>
                                 <option value="" disabled selected>Select LRN</option>
                                 <?php while ($row = $students->fetch_assoc()): ?>
-                                    <option value="<?= $row['lrn'] ?>"
-                                        data-firstname="<?= $row['first_name'] ?>"
-                                        data-lastname="<?= $row['last_name'] ?>"
-                                        data-mi="<?= $row['mi'] ?>"
-                                        data-grade="<?= $row['grade'] ?>"
-                                        data-section="<?= $row['section'] ?>"
-                                        data-track="<?= $row['track'] ?>"
-                                        data-strand="<?= $row['strand'] ?>">
-                                        <?= $row['lrn'] ?>
+                                    <option
+                                        value="<?= $row['lrn'] ?>"
+                                        data-firstname="<?= htmlspecialchars($row['first_name']) ?>"
+                                        data-lastname="<?= htmlspecialchars($row['last_name']) ?>"
+                                        data-mi="<?= htmlspecialchars($row['mi']) ?>"
+                                        data-grade="<?= htmlspecialchars($row['grade']) ?>"
+                                        data-section="<?= htmlspecialchars($row['section']) ?>"
+                                        data-track="<?= htmlspecialchars($row['track']) ?>"
+                                        data-strand="<?= htmlspecialchars($row['strand']) ?>">
+                                        <?= htmlspecialchars($row['lrn']) ?>
                                     </option>
                                 <?php endwhile; ?>
                             </select>
@@ -79,21 +80,6 @@ $students = $conn->query("SELECT lrn, last_name, first_name, mi, grade, section,
                         <div class="mb-3">
                             <label for="fullname" class="form-label">Full Name</label>
                             <input type="text" class="form-control" id="fullname" readonly>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label">First Name</label>
-                            <input type="text" id="firstname" class="form-control" readonly>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label">Last Name</label>
-                            <input type="text" id="lastname" class="form-control" readonly>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label">M.I.</label>
-                            <input type="text" id="mi" class="form-control" readonly>
                         </div>
 
                         <div class="mb-3">
@@ -187,24 +173,21 @@ $students = $conn->query("SELECT lrn, last_name, first_name, mi, grade, section,
         });
 
         document.getElementById("lrnDropdown").addEventListener("change", function() {
-        const selectedOption = this.options[this.selectedIndex];
+            const selectedOption = this.options[this.selectedIndex];
 
-        const firstname = selectedOption.getAttribute("data-firstname");
-        const lastname = selectedOption.getAttribute("data-lastname");
-        const mi = selectedOption.getAttribute("data-mi");
-        const grade = selectedOption.getAttribute("data-grade");
-        const section = selectedOption.getAttribute("data-section");
-        const track = selectedOption.getAttribute("data-track");
-        const strand = selectedOption.getAttribute("data-strand");
+            const firstname = selectedOption.getAttribute("data-firstname");
+            const lastname = selectedOption.getAttribute("data-lastname");
+            const mi = selectedOption.getAttribute("data-mi");
+            const grade = selectedOption.getAttribute("data-grade");
+            const section = selectedOption.getAttribute("data-section");
+            const track = selectedOption.getAttribute("data-track");
+            const strand = selectedOption.getAttribute("data-strand");
 
-        document.getElementById("firstname").value = firstname;
-        document.getElementById("lastname").value = lastname;
-        document.getElementById("mi").value = mi;
-        document.getElementById("grade").value = grade;
-        document.getElementById("section").value = section;
-        document.getElementById("track").value = track;
-        document.getElementById("strand").value = strand;
-        document.getElementById("fullname").value = `${firstname} ${mi} ${lastname}`.replace(/\s+/g, ' ').trim();
+            document.getElementById("fullname").value = `${firstname} ${mi} ${lastname}`.replace(/\s+/g, ' ').trim();
+            document.getElementById("grade").value = grade;
+            document.getElementById("section").value = section;
+            document.getElementById("track").value = track;
+            document.getElementById("strand").value = strand;
         });
     </script>
 
