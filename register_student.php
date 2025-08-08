@@ -78,6 +78,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         <div class="row justify-content-center">
             <div class="col-md-10 col-lg-10">
                 <div class="register-form">
+
+                    <div class="d-flex justify-content-end mb-3">
+                        <a href="update_students.php" class="btn btn-warning">Update Student Details</a>
+                    </div>
+
                     <h4 class="form-title">Register Student</h4>
 
                     <form method="POST" action="">

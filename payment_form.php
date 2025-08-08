@@ -1,15 +1,37 @@
 <?php
-include 'includes/navbar.php';
+// include 'includes/navbar.php';
 include 'dbconn.php';
+
 $students = $conn->query("SELECT lrn, last_name, first_name, mi, grade, section, track, strand FROM students ORDER BY lrn ASC");
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $lrn = $_POST['lrn'];
+    $paymentType = $_POST['paymentType'];
+
+    if ($paymentType === 'pta' && isset($_POST['pta_payments'])) {
+        foreach ($_POST['pta_payments'] as $label => $amount) {
+            $stmt = $conn->prepare("INSERT INTO payments (lrn, payment_type, payment_label, amount) VALUES (?, ?, ?, ?)");
+            $stmt->bind_param("sssd", $lrn, $paymentType, $label, $amount);
+            $stmt->execute();
+        }
+    } elseif (in_array($paymentType, ['graduation', 'immersion', 'others']) && isset($_POST['singlePayment'])) {
+        $amount = $_POST['singlePayment'];
+        $label = ucfirst($paymentType) . " Fee";
+        $stmt = $conn->prepare("INSERT INTO payments (lrn, payment_type, payment_label, amount) VALUES (?, ?, ?, ?)");
+        $stmt->bind_param("sssd", $lrn, $paymentType, $label, $amount);
+        $stmt->execute();
+    }
+    echo "<script>alert('Payment saved successfully!'); window.location.href='payment_form.php';</script>";
+    exit;
+}
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Student Form with Payment Fields</title>
+    <meta charset="UTF-8">
+    <title>Student Payment Form</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
     <style>
         body {
@@ -23,43 +45,20 @@ $students = $conn->query("SELECT lrn, last_name, first_name, mi, grade, section,
             border-radius: 12px;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
         }
-
-        .form-title {
-            font-weight: bold;
-            margin-bottom: 1rem;
-        }
-
-        .payment-row {
-            display: flex;
-            align-items: center;
-            margin-bottom: 0.75rem;
-        }
-
-        .payment-row span {
-            width: 40px;
-            font-weight: bold;
-        }
-
-        .payment-row small {
-            margin-left: 10px;
-            color: #6c757d;
-        }
     </style>
 </head>
 
 <body>
-
     <div class="container">
         <div class="row g-4">
-
             <!-- Left Column -->
             <div class="col-md-6">
                 <div class="form-section">
-                    <h4 class="form-title">Student Info</h4>
-                    <form>
+                    <h4 class="mb-4">Student Info</h4>
+                    <form id="studentForm">
                         <div class="mb-3">
-                            <label for="lrn" class="form-label">LRN</label>
-                            <select class="form-select" id="lrnDropdown" required>
+                            <label for="lrnDropdown" class="form-label">LRN</label>
+                            <select class="form-select" name="lrn" id="lrnDropdown" required>
                                 <option value="" disabled selected>Select LRN</option>
                                 <?php while ($row = $students->fetch_assoc()): ?>
                                     <option
@@ -77,30 +76,11 @@ $students = $conn->query("SELECT lrn, last_name, first_name, mi, grade, section,
                             </select>
                         </div>
 
-                        <div class="mb-3">
-                            <label for="fullname" class="form-label">Full Name</label>
-                            <input type="text" class="form-control" id="fullname" readonly>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label">Grade</label>
-                            <input type="text" id="grade" class="form-control" readonly>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label">Section</label>
-                            <input type="text" id="section" class="form-control" readonly>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label">Track</label>
-                            <input type="text" id="track" class="form-control" readonly>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label">Strand</label>
-                            <input type="text" id="strand" class="form-control" readonly>
-                        </div>
+                        <input type="text" id="fullname" class="form-control mb-2" placeholder="Full Name" readonly>
+                        <input type="text" id="grade" class="form-control mb-2" placeholder="Grade" readonly>
+                        <input type="text" id="section" class="form-control mb-2" placeholder="Section" readonly>
+                        <input type="text" id="track" class="form-control mb-2" placeholder="Track" readonly>
+                        <input type="text" id="strand" class="form-control mb-2" placeholder="Strand" readonly>
                     </form>
                 </div>
             </div>
@@ -108,89 +88,143 @@ $students = $conn->query("SELECT lrn, last_name, first_name, mi, grade, section,
             <!-- Right Column -->
             <div class="col-md-6">
                 <div class="form-section">
-                    <h4 class="form-title">Payment Details</h4>
-
-                    <div class="mb-3">
-                        <label for="paymentType" class="form-label">Select Payment Type</label>
-                        <select class="form-select" id="paymentType">
-                            <option value="" disabled selected>Select Payment Type</option>
-                            <option value="pta">PTA</option>
-                            <option value="graduation">Graduation</option>
-                            <option value="immersion">Immersion</option>
-                        </select>
-                    </div>
-
-                    <form id="paymentForm">
-                        <div class="row">
-                            <div class="col-12" id="paymentFields">
-                                <!-- JS will inject payment fields here -->
-                            </div>
+                    <h4 class="mb-4">Payment Details</h4>
+                    <form method="POST" id="paymentForm">
+                        <input type="hidden" name="lrn" id="hiddenLrn">
+                        <div class="mb-3">
+                            <label for="paymentType" class="form-label">Payment Type</label>
+                            <select class="form-select" name="paymentType" id="paymentType" required>
+                                <option value="" disabled selected>Select Payment Type</option>
+                                <option value="pta">PTA</option>
+                                <option value="graduation">Graduation</option>
+                                <option value="immersion">Immersion</option>
+                                <option value="others">Others</option>
+                            </select>
                         </div>
-                        <button type="submit" class="btn btn-success w-100 mt-3">Save Payment</button>
+
+                        <div id="paymentFields"></div>
+
+                        <div class="mt-3">
+                            <p><strong>Total:</strong> <span id="summary-total">₱0.00</span></p>
+                            <p><strong>Received by:</strong> <span id="summary-received-by">N/A</span></p>
+                            <p><strong>Date:</strong> <span id="summary-date">--/--/----</span></p>
+                        </div>
+
+                        <button type="submit" class="btn btn-success w-100">Save Payment</button>
                     </form>
                 </div>
-
-                <!-- Summary (No Inputs) -->
-                <div class="mt-4 ps-2">
-                    <p><strong>Total:</strong> <span id="summary-total">₱0.00</span></p>
-                    <p><strong>Received by:</strong> <span id="summary-received-by">N/A</span></p>
-                    <p><strong>Date:</strong> <span id="summary-date">--/--/----</span></p>
-                </div>
-
             </div>
         </div>
     </div>
 
-    <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        const ptaFees = [{
+                label: 'GPTA Project',
+                amount: 200
+            },
+            {
+                label: 'Membership Fee',
+                amount: 50
+            },
+            {
+                label: 'SSLG',
+                amount: 60
+            },
+            {
+                label: 'Journalism (English and Filipino)',
+                amount: 90
+            },
+            {
+                label: 'BSP and GSP',
+                amount: 100
+            },
+            {
+                label: 'DBC',
+                amount: 30
+            },
+            {
+                label: 'Religious Activity',
+                amount: 30
+            },
+            {
+                label: 'Department Aid',
+                amount: 200
+            },
+            {
+                label: 'Athletics',
+                amount: 75
+            },
+            {
+                label: 'Insurance',
+                amount: 25
+            }
+        ];
+
         const paymentTypeSelect = document.getElementById('paymentType');
         const paymentFieldsContainer = document.getElementById('paymentFields');
+
+        function updateTotal() {
+            const checkboxes = document.querySelectorAll('.pta-checkbox');
+            let total = 0;
+            checkboxes.forEach(cb => {
+                if (cb.checked) total += parseFloat(cb.dataset.amount);
+            });
+            document.getElementById('summary-total').textContent = `₱${total.toFixed(2)}`;
+        }
 
         paymentTypeSelect.addEventListener('change', () => {
             const type = paymentTypeSelect.value;
             paymentFieldsContainer.innerHTML = '';
 
             if (type === 'pta') {
-                for (let i = 1; i <= 10; i++) {
-                    const amount = i * 50;
+                ptaFees.forEach((fee, index) => {
                     const row = `
-            <div class="payment-row">
-              <span>#${i}</span>
-              <input type="text" class="form-control" name="payment${i}" placeholder="Enter details">
-              <small>(₱${amount.toFixed(2)})</small>
+            <div class="form-check mb-2">
+                <input type="checkbox" class="form-check-input pta-checkbox" 
+                    name="pta_payments[${fee.label}]" 
+                    value="${fee.amount}" data-amount="${fee.amount}" id="pta${index}">
+                <label for="pta${index}" class="form-check-label d-flex justify-content-between w-100">
+                    <span>${fee.label}</span>
+                    <span>₱${fee.amount.toFixed(2)}</span>
+                </label>
             </div>`;
                     paymentFieldsContainer.insertAdjacentHTML('beforeend', row);
-                }
-            } else if (type === 'graduation' || type === 'immersion') {
+                });
+                document.getElementById('summary-received-by').textContent = 'Your Name';
+                document.getElementById('summary-date').textContent = new Date().toLocaleDateString();
+                updateTotal();
+            } else {
                 paymentFieldsContainer.innerHTML = `
-          <div class="mb-3">
-            <label for="singlePayment" class="form-label">${type.charAt(0).toUpperCase() + type.slice(1)} Payment</label>
-            <input type="text" class="form-control" name="singlePayment" placeholder="Enter payment amount">
-          </div>
-        `;
+        <div class="mb-3">
+            <label>${type.charAt(0).toUpperCase() + type.slice(1)} Payment</label>
+            <input type="number" name="singlePayment" class="form-control" required>
+        </div>`;
+                document.getElementById('summary-total').textContent = '₱0.00';
+                document.getElementById('summary-received-by').textContent = 'N/A';
+                document.getElementById('summary-date').textContent = '--/--/----';
+            }
+        });
+
+        paymentFieldsContainer.addEventListener('change', e => {
+            if (e.target.classList.contains('pta-checkbox')) {
+                updateTotal();
             }
         });
 
         document.getElementById("lrnDropdown").addEventListener("change", function() {
-            const selectedOption = this.options[this.selectedIndex];
-
-            const firstname = selectedOption.getAttribute("data-firstname");
-            const lastname = selectedOption.getAttribute("data-lastname");
-            const mi = selectedOption.getAttribute("data-mi");
-            const grade = selectedOption.getAttribute("data-grade");
-            const section = selectedOption.getAttribute("data-section");
-            const track = selectedOption.getAttribute("data-track");
-            const strand = selectedOption.getAttribute("data-strand");
-
-            document.getElementById("fullname").value = `${firstname} ${mi} ${lastname}`.replace(/\s+/g, ' ').trim();
-            document.getElementById("grade").value = grade;
-            document.getElementById("section").value = section;
-            document.getElementById("track").value = track;
-            document.getElementById("strand").value = strand;
+            const selected = this.options[this.selectedIndex];
+            const fname = selected.getAttribute("data-firstname") || '';
+            const mi = selected.getAttribute("data-mi") || '';
+            const lname = selected.getAttribute("data-lastname") || '';
+            const fullName = [fname, mi, lname].filter(Boolean).join(' ');
+            document.getElementById("fullname").value = fullName;
+            document.getElementById("grade").value = selected.getAttribute("data-grade");
+            document.getElementById("section").value = selected.getAttribute("data-section");
+            document.getElementById("track").value = selected.getAttribute("data-track");
+            document.getElementById("strand").value = selected.getAttribute("data-strand");
+            document.getElementById("hiddenLrn").value = selected.value;
         });
     </script>
-
 </body>
 
 </html>
