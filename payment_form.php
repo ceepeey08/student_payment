@@ -1,12 +1,42 @@
 <?php
-// include 'includes/navbar.php';
 include 'dbconn.php';
+
+if (isset($_GET['action']) && $_GET['action'] === 'get_paid_pta') {
+    $lrn = $_GET['lrn'] ?? '';
+    $paid = [];
+
+    if ($lrn) {
+        $stmt = $conn->prepare("SELECT payment_label FROM payments WHERE lrn = ? AND payment_type = 'pta'");
+        $stmt->bind_param("s", $lrn);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        while ($row = $result->fetch_assoc()) {
+            $paid[] = $row['payment_label'];
+        }
+        $stmt->close();
+    }
+
+    header('Content-Type: application/json');
+    echo json_encode($paid);
+    exit;
+}
 
 $students = $conn->query("SELECT lrn, last_name, first_name, mi, grade, section, track, strand FROM students ORDER BY lrn ASC");
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $lrn = $_POST['lrn'];
-    $paymentType = $_POST['paymentType'];
+    $lrn = $_POST['lrn'] ?? '';
+    $paymentType = $_POST['paymentType'] ?? '';
+
+    $checkStudent = $conn->prepare("SELECT COUNT(*) FROM students WHERE lrn = ?");
+    $checkStudent->bind_param("s", $lrn);
+    $checkStudent->execute();
+    $checkStudent->bind_result($exists);
+    $checkStudent->fetch();
+    $checkStudent->close();
+
+    if ($exists == 0) {
+        die("<script>alert('Invalid LRN selected. Please choose a valid student.'); window.history.back();</script>");
+    }
 
     if ($paymentType === 'pta' && isset($_POST['pta_payments'])) {
         foreach ($_POST['pta_payments'] as $label => $amount) {
@@ -14,13 +44,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->bind_param("sssd", $lrn, $paymentType, $label, $amount);
             $stmt->execute();
         }
-    } elseif (in_array($paymentType, ['graduation', 'immersion', 'others']) && isset($_POST['singlePayment'])) {
-        $amount = $_POST['singlePayment'];
-        $label = ucfirst($paymentType) . " Fee";
+    } elseif ($paymentType === 'graduation' && !empty($_POST['graduation_payment'])) {
+        $amount = $_POST['graduation_payment'];
+        $label = "Graduation Fee";
+        $stmt = $conn->prepare("INSERT INTO payments (lrn, payment_type, payment_label, amount) VALUES (?, ?, ?, ?)");
+        $stmt->bind_param("sssd", $lrn, $paymentType, $label, $amount);
+        $stmt->execute();
+    } elseif ($paymentType === 'immersion' && !empty($_POST['immersion_payment'])) {
+        $amount = $_POST['immersion_payment'];
+        $label = "Immersion Fee";
+        $stmt = $conn->prepare("INSERT INTO payments (lrn, payment_type, payment_label, amount) VALUES (?, ?, ?, ?)");
+        $stmt->bind_param("sssd", $lrn, $paymentType, $label, $amount);
+        $stmt->execute();
+    } elseif ($paymentType === 'others' && !empty($_POST['others_label']) && !empty($_POST['others_payment'])) {
+        $amount = $_POST['others_payment'];
+        $label = $_POST['others_label'];
         $stmt = $conn->prepare("INSERT INTO payments (lrn, payment_type, payment_label, amount) VALUES (?, ?, ?, ?)");
         $stmt->bind_param("sssd", $lrn, $paymentType, $label, $amount);
         $stmt->execute();
     }
+
     echo "<script>alert('Payment saved successfully!'); window.location.href='payment_form.php';</script>";
     exit;
 }
@@ -116,7 +159,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         </div>
     </div>
-
+    <?php include 'includes/navbar.php'; ?>
     <script>
         const ptaFees = [{
                 label: 'GPTA Project',
@@ -162,47 +205,106 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         const paymentTypeSelect = document.getElementById('paymentType');
         const paymentFieldsContainer = document.getElementById('paymentFields');
+        let paidPta = [];
+
+        function updateSummary(total) {
+            document.getElementById('summary-total').textContent = `₱${total.toFixed(2)}`;
+            document.getElementById('summary-received-by').textContent = 'Treasurer';
+            document.getElementById('summary-date').textContent = new Date().toLocaleDateString();
+        }
+
+        function resetSummary() {
+            document.getElementById('summary-total').textContent = '₱0.00';
+            document.getElementById('summary-received-by').textContent = 'N/A';
+            document.getElementById('summary-date').textContent = '--/--/----';
+        }
+
+        function renderPtaFields() {
+            paymentFieldsContainer.innerHTML = '';
+            ptaFees.forEach((fee, index) => {
+                const isPaid = paidPta.includes(fee.label);
+                let row = `
+            <div class="form-check mb-2">
+                <input type="checkbox" class="form-check-input pta-checkbox"
+                    name="pta_payments[${fee.label}]"
+                    value="${fee.amount}" data-amount="${fee.amount}" id="pta${index}"
+                    ${isPaid ? 'disabled checked' : ''}>
+                <label for="pta${index}" class="form-check-label d-flex justify-content-between w-100">
+                    <span>${fee.label}</span>`;
+
+                if (isPaid) {
+                    row += `<span class="badge bg-success">Paid</span>`;
+                } else {
+                    row += `<span>₱${fee.amount.toFixed(2)}</span>`;
+                }
+
+                row += `</label></div>`;
+                paymentFieldsContainer.insertAdjacentHTML('beforeend', row);
+            });
+            updateTotal();
+        }
+
+
+        function renderGraduationFields() {
+            paymentFieldsContainer.innerHTML = `
+                <div class="mb-3">
+                    <label>Graduation Payment</label>
+                    <input type="number" name="graduation_payment" class="form-control" id="graduationPayment" required>
+                </div>`;
+            resetSummary();
+            document.getElementById('graduationPayment').addEventListener('input', function() {
+                const amount = parseFloat(this.value) || 0;
+                updateSummary(amount);
+            });
+        }
+
+        function renderImmersionFields() {
+            paymentFieldsContainer.innerHTML = `
+                <div class="mb-3">
+                    <label>Immersion Payment</label>
+                    <input type="number" name="immersion_payment" class="form-control" id="immersionPayment" required>
+                </div>`;
+            resetSummary();
+            document.getElementById('immersionPayment').addEventListener('input', function() {
+                const amount = parseFloat(this.value) || 0;
+                updateSummary(amount);
+            });
+        }
+
+        function renderOthersFields() {
+            paymentFieldsContainer.innerHTML = `
+                <div class="mb-3">
+                    <label>Other Payment Description</label>
+                    <input type="text" name="others_label" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                    <label>Amount</label>
+                    <input type="number" name="others_payment" class="form-control" id="othersPayment" required>
+                </div>`;
+            resetSummary();
+            document.getElementById('othersPayment').addEventListener('input', function() {
+                const amount = parseFloat(this.value) || 0;
+                updateSummary(amount);
+            });
+        }
 
         function updateTotal() {
             const checkboxes = document.querySelectorAll('.pta-checkbox');
             let total = 0;
             checkboxes.forEach(cb => {
-                if (cb.checked) total += parseFloat(cb.dataset.amount);
+                if (cb.checked && !cb.disabled) {
+                    total += parseFloat(cb.dataset.amount);
+                }
             });
-            document.getElementById('summary-total').textContent = `₱${total.toFixed(2)}`;
+            updateSummary(total);
         }
 
         paymentTypeSelect.addEventListener('change', () => {
             const type = paymentTypeSelect.value;
-            paymentFieldsContainer.innerHTML = '';
-
-            if (type === 'pta') {
-                ptaFees.forEach((fee, index) => {
-                    const row = `
-            <div class="form-check mb-2">
-                <input type="checkbox" class="form-check-input pta-checkbox" 
-                    name="pta_payments[${fee.label}]" 
-                    value="${fee.amount}" data-amount="${fee.amount}" id="pta${index}">
-                <label for="pta${index}" class="form-check-label d-flex justify-content-between w-100">
-                    <span>${fee.label}</span>
-                    <span>₱${fee.amount.toFixed(2)}</span>
-                </label>
-            </div>`;
-                    paymentFieldsContainer.insertAdjacentHTML('beforeend', row);
-                });
-                document.getElementById('summary-received-by').textContent = 'Your Name';
-                document.getElementById('summary-date').textContent = new Date().toLocaleDateString();
-                updateTotal();
-            } else {
-                paymentFieldsContainer.innerHTML = `
-        <div class="mb-3">
-            <label>${type.charAt(0).toUpperCase() + type.slice(1)} Payment</label>
-            <input type="number" name="singlePayment" class="form-control" required>
-        </div>`;
-                document.getElementById('summary-total').textContent = '₱0.00';
-                document.getElementById('summary-received-by').textContent = 'N/A';
-                document.getElementById('summary-date').textContent = '--/--/----';
-            }
+            if (type === 'pta') renderPtaFields();
+            else if (type === 'graduation') renderGraduationFields();
+            else if (type === 'immersion') renderImmersionFields();
+            else if (type === 'others') renderOthersFields();
         });
 
         paymentFieldsContainer.addEventListener('change', e => {
@@ -216,15 +318,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             const fname = selected.getAttribute("data-firstname") || '';
             const mi = selected.getAttribute("data-mi") || '';
             const lname = selected.getAttribute("data-lastname") || '';
-            const fullName = [fname, mi, lname].filter(Boolean).join(' ');
-            document.getElementById("fullname").value = fullName;
+            document.getElementById("fullname").value = [fname, mi, lname].filter(Boolean).join(' ');
             document.getElementById("grade").value = selected.getAttribute("data-grade");
             document.getElementById("section").value = selected.getAttribute("data-section");
             document.getElementById("track").value = selected.getAttribute("data-track");
             document.getElementById("strand").value = selected.getAttribute("data-strand");
             document.getElementById("hiddenLrn").value = selected.value;
+
+            const lrn = selected.value;
+            if (lrn) {
+                fetch("payment_form.php?action=get_paid_pta&lrn=" + lrn)
+                    .then(res => res.json())
+                    .then(data => {
+                        paidPta = data;
+                        if (paymentTypeSelect.value === "pta") {
+                            renderPtaFields();
+                        }
+                    });
+            }
+        });
+
+        document.getElementById("paymentForm").addEventListener("submit", function(e) {
+            if (!document.getElementById("hiddenLrn").value) {
+                e.preventDefault();
+                alert("Please select a student first!");
+            }
         });
     </script>
+
 </body>
 
 </html>
