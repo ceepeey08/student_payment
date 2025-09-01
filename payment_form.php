@@ -1,5 +1,14 @@
 <?php
+session_start();
+if (!isset($_SESSION['first_name']) || !isset($_SESSION['last_name'])) {
+    die("Not logged in");
+}
+$receivedBy = $_SESSION['first_name'] . ' ' . $_SESSION['last_name'];
+?>
+
+<?php
 include 'dbconn.php';
+
 
 if (isset($_GET['action']) && $_GET['action'] === 'get_paid_pta') {
     $lrn = $_GET['lrn'] ?? '';
@@ -40,27 +49,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($paymentType === 'pta' && isset($_POST['pta_payments'])) {
         foreach ($_POST['pta_payments'] as $label => $amount) {
-            $stmt = $conn->prepare("INSERT INTO payments (lrn, payment_type, payment_label, amount) VALUES (?, ?, ?, ?)");
-            $stmt->bind_param("sssd", $lrn, $paymentType, $label, $amount);
+            $stmt = $conn->prepare("INSERT INTO payments (lrn, payment_type, payment_label, amount, received_by) VALUES (?, ?, ?, ?, ?)");
+            $stmt->bind_param("sssds", $lrn, $paymentType, $label, $amount, $receivedBy);
             $stmt->execute();
         }
     } elseif ($paymentType === 'graduation' && !empty($_POST['graduation_payment'])) {
         $amount = $_POST['graduation_payment'];
         $label = "Graduation Fee";
-        $stmt = $conn->prepare("INSERT INTO payments (lrn, payment_type, payment_label, amount) VALUES (?, ?, ?, ?)");
-        $stmt->bind_param("sssd", $lrn, $paymentType, $label, $amount);
+        $stmt = $conn->prepare("INSERT INTO payments (lrn, payment_type, payment_label, amount, received_by) VALUES (?, ?, ?, ?, ?)");
+        $stmt->bind_param("sssds", $lrn, $paymentType, $label, $amount, $receivedBy);
         $stmt->execute();
     } elseif ($paymentType === 'immersion' && !empty($_POST['immersion_payment'])) {
         $amount = $_POST['immersion_payment'];
         $label = "Immersion Fee";
-        $stmt = $conn->prepare("INSERT INTO payments (lrn, payment_type, payment_label, amount) VALUES (?, ?, ?, ?)");
-        $stmt->bind_param("sssd", $lrn, $paymentType, $label, $amount);
+        $stmt = $conn->prepare("INSERT INTO payments (lrn, payment_type, payment_label, amount, received_by) VALUES (?, ?, ?, ?, ?)");
+        $stmt->bind_param("sssds", $lrn, $paymentType, $label, $amount, $receivedBy);
         $stmt->execute();
     } elseif ($paymentType === 'others' && !empty($_POST['others_label']) && !empty($_POST['others_payment'])) {
         $amount = $_POST['others_payment'];
         $label = $_POST['others_label'];
-        $stmt = $conn->prepare("INSERT INTO payments (lrn, payment_type, payment_label, amount) VALUES (?, ?, ?, ?)");
-        $stmt->bind_param("sssd", $lrn, $paymentType, $label, $amount);
+        $stmt = $conn->prepare("INSERT INTO payments (lrn, payment_type, payment_label, amount, received_by) VALUES (?, ?, ?, ?, ?)");
+        $stmt->bind_param("sssds", $lrn, $paymentType, $label, $amount, $receivedBy);
         $stmt->execute();
     }
 
@@ -207,15 +216,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         const paymentFieldsContainer = document.getElementById('paymentFields');
         let paidPta = [];
 
+        const receivedBy = <?php echo json_encode($receivedBy); ?>;
+
         function updateSummary(total) {
             document.getElementById('summary-total').textContent = `₱${total.toFixed(2)}`;
-            document.getElementById('summary-received-by').textContent = 'Treasurer';
+            document.getElementById('summary-received-by').textContent = receivedBy && receivedBy.trim() !== '' ? receivedBy : 'N/A';
             document.getElementById('summary-date').textContent = new Date().toLocaleDateString();
         }
 
         function resetSummary() {
             document.getElementById('summary-total').textContent = '₱0.00';
-            document.getElementById('summary-received-by').textContent = 'N/A';
+            document.getElementById('summary-received-by').textContent = receivedBy && receivedBy.trim() !== '' ? receivedBy : 'N/A';
             document.getElementById('summary-date').textContent = '--/--/----';
         }
 
